@@ -61,49 +61,132 @@ const initialListings: Listing[] = [
   { crop: 'Onion', variety: 'N-53', quantity: '480 kg left', route: 'Retail', grade: 'B', status: 'Live', price: '₹31 / kg' },
 ];
 
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import { LoginForm } from './components/auth/LoginForm';
 import { RegisterForm } from './components/auth/RegisterForm';
-import { ProtectedRoute } from './components/auth/ProtectedRoute';
 
 function App() {
+  const [currentRole, setCurrentRole] = useState<Role | null>(() => {
+    return (localStorage.getItem('dms_role') as Role) || null;
+  });
+
+  const handleRoleSelect = (role: Role) => {
+    setCurrentRole(role);
+    localStorage.setItem('dms_role', role);
+  };
+
+  const handleSwitch = () => {
+    setCurrentRole(null);
+    localStorage.removeItem('dms_role');
+  };
+
   return (
     <AuthProvider>
       <Router>
+        {/* Floating Quick Switcher Toolbar */}
+        {currentRole && (
+          <div style={{
+            position: 'fixed',
+            bottom: '16px',
+            right: '16px',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: '#0f172a',
+            color: '#fff',
+            padding: '8px 14px',
+            borderRadius: '999px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
+            fontSize: '13px',
+            fontWeight: 500,
+          }}>
+            <span style={{ color: '#94a3b8' }}>Mode:</span>
+            <button
+              onClick={() => handleRoleSelect('farmer')}
+              style={{
+                background: currentRole === 'farmer' ? '#16a34a' : 'transparent',
+                color: '#fff',
+                border: 'none',
+                padding: '4px 10px',
+                borderRadius: '999px',
+                cursor: 'pointer',
+                fontWeight: currentRole === 'farmer' ? 700 : 500
+              }}
+            >
+              🌾 Farmer
+            </button>
+            <button
+              onClick={() => handleRoleSelect('retail')}
+              style={{
+                background: currentRole === 'retail' ? '#0284c7' : 'transparent',
+                color: '#fff',
+                border: 'none',
+                padding: '4px 10px',
+                borderRadius: '999px',
+                cursor: 'pointer',
+                fontWeight: currentRole === 'retail' ? 700 : 500
+              }}
+            >
+              🛒 Retail
+            </button>
+            <button
+              onClick={() => handleRoleSelect('bulk')}
+              style={{
+                background: currentRole === 'bulk' ? '#d97706' : 'transparent',
+                color: '#fff',
+                border: 'none',
+                padding: '4px 10px',
+                borderRadius: '999px',
+                cursor: 'pointer',
+                fontWeight: currentRole === 'bulk' ? 700 : 500
+              }}
+            >
+              🏢 Bulk
+            </button>
+            <button
+              onClick={handleSwitch}
+              style={{
+                background: '#334155',
+                color: '#cbd5e1',
+                border: 'none',
+                padding: '4px 10px',
+                borderRadius: '999px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+              title="Switch role"
+            >
+              🔄 Change
+            </button>
+          </div>
+        )}
+
         <Routes>
-          <Route path="/login" element={<LoginForm />} />
+          <Route path="/login" element={<LoginForm onDemoSelect={handleRoleSelect} />} />
           <Route path="/register" element={<RegisterForm />} />
-          <Route path="/farmer/dashboard" element={
-            <ProtectedRoute allowedRoles={['farmer', 'fpo']}>
-              <FarmerDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/buyer/dashboard" element={
-            <ProtectedRoute allowedRoles={['buyer', 'admin']}>
-              <RetailBuyerDashboard onSwitch={() => {}} />
-            </ProtectedRoute>
-          } />
-          <Route path="/bulk/dashboard" element={
-            <ProtectedRoute allowedRoles={['buyer', 'admin']}>
-              <BulkBuyerDashboard onSwitch={() => {}} />
-            </ProtectedRoute>
-          } />
-          <Route path="/" element={<HomeRedirect />} />
+          <Route path="/farmer/dashboard" element={<FarmerDashboard onSwitch={handleSwitch} />} />
+          <Route path="/buyer/dashboard" element={<RetailBuyerDashboard onSwitch={handleSwitch} />} />
+          <Route path="/bulk/dashboard" element={<BulkBuyerDashboard onSwitch={handleSwitch} />} />
+          <Route
+            path="*"
+            element={
+              !currentRole ? (
+                <RolePicker onSelect={handleRoleSelect} />
+              ) : currentRole === 'farmer' ? (
+                <FarmerDashboard onSwitch={handleSwitch} />
+              ) : currentRole === 'retail' ? (
+                <RetailBuyerDashboard onSwitch={handleSwitch} />
+              ) : (
+                <BulkBuyerDashboard onSwitch={handleSwitch} />
+              )
+            }
+          />
         </Routes>
       </Router>
     </AuthProvider>
   );
-}
-
-function HomeRedirect() {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
-  if (user.role === 'farmer') return <Navigate to="/farmer/dashboard" replace />;
-  // For simplicity, default buyer to retail dashboard
-  if (user.role === 'buyer') return <Navigate to="/buyer/dashboard" replace />;
-  return <Navigate to="/login" replace />;
 }
 
 function FarmerDashboard({ onSwitch = () => {} }: { onSwitch?: () => void }) {
@@ -158,19 +241,21 @@ function FarmerDashboard({ onSwitch = () => {} }: { onSwitch?: () => void }) {
   }, []);
 
   const addListing = (newListing?: Listing) => {
-    const item = newListing || {
-      crop: 'Soybean',
-      variety: 'JS 335',
-      quantity: '520 kg',
-      route: 'Bulk' as const,
-      grade: 'A' as const,
-      status: 'Live' as const,
-      price: '₹4,580 / q',
-    };
-    setListings((current) => [item, ...current]);
+    if (newListing) {
+      setListings((prev) => [newListing, ...prev]);
+      notify(`Produce listed: ${newListing.crop} (${newListing.quantity})`);
+      setShowListing(false);
+      return;
+    }
+    const sampleCrops = [
+      { crop: 'Potato', variety: 'Kufri Jyoti', quantity: '800 kg', route: 'Bulk' as const, grade: 'A' as const, status: 'Live' as const, price: '₹18 / kg' },
+      { crop: 'Chilli', variety: 'Guntur Sannam', quantity: '120 kg', route: 'Retail' as const, grade: 'A' as const, status: 'Live' as const, price: '₹95 / kg' },
+      { crop: 'Mustard', variety: 'Pusa Bold', quantity: '500 kg', route: 'Bulk' as const, grade: 'B' as const, status: 'Pending pickup' as const, price: '₹5,200 / q' },
+    ];
+    const pick = sampleCrops[Math.floor(Math.random() * sampleCrops.length)];
+    setListings((prev) => [pick, ...prev]);
+    notify(`New lot added: ${pick.crop} (${pick.quantity})`);
     setShowListing(false);
-    setActiveView('inventory');
-    notify(`${item.crop} listing published to marketplace & saved to MongoDB Atlas!`);
   };
 
   return (
@@ -239,45 +324,91 @@ function RetailBuyerDashboard({ onSwitch }: BuyerShellProps) {
     notify(`${name} added to cart`);
   };
 
-  const handleCheckout = () => {
-    if (cartItems.length === 0) return;
-    notify(`Order placed securely via Escrow for ₹${cartItems.reduce((acc, item) => acc + (item.priceNum * item.quantity), 0)}`);
-    setCartItems([]);
-    setIsCartOpen(false);
-    setView('orders');
+  const handleUpdateQuantity = (name: string, delta: number) => {
+    setCartItems(prev => {
+      return prev.map(item => {
+        if (item.name === name) {
+          const newQty = item.quantity + delta;
+          return newQty > 0 ? { ...item, quantity: newQty } : null;
+        }
+        return item;
+      }).filter(Boolean) as CartItemData[];
+    });
   };
 
+  const totalCartAmount = cartItems.reduce((sum, item) => sum + item.priceNum * item.quantity, 0);
+
   return (
-    <div className="buyer-app">
+    <div className="buyer-layout">
       <BuyerHeader type="retail" onSwitch={onSwitch} onNotify={notify} />
       <div className="buyer-body">
         <aside className="buyer-sidebar">
-          <p className="nav-label">MY SHOPPING</p>
-          <button className={view === 'shop' ? 'buyer-nav active' : 'buyer-nav'} onClick={() => setView('shop')}><ShoppingCart size={18} /> Fresh marketplace</button>
-          <button className={view === 'orders' ? 'buyer-nav active' : 'buyer-nav'} onClick={() => setView('orders')}><Package size={18} /> My orders <b>2</b></button>
-          <button className={view === 'payments' ? 'buyer-nav active' : 'buyer-nav'} onClick={() => setView('payments')}><WalletCards size={18} /> Payments</button>
-          <div className="buyer-sidebar-foot">
-            <button className="buyer-nav"><CircleHelp size={18} /> Help center</button>
-            <div className="buyer-trust">
-              <ShieldCheck size={17} />
-              <span><strong>KrishiSetu protected</strong><small>Every order is quality checked</small></span>
+          <p className="nav-label">RETAIL BUYER</p>
+          <button className={`buyer-nav-item ${view === 'shop' ? 'active' : ''}`} onClick={() => setView('shop')}>
+            <ShoppingCart size={18} /><span>Marketplace</span>
+          </button>
+          <button className={`buyer-nav-item ${view === 'orders' ? 'active' : ''}`} onClick={() => setView('orders')}>
+            <ShoppingBag size={18} /><span>My orders</span><b>2</b>
+          </button>
+          <button className={`buyer-nav-item ${view === 'payments' ? 'active' : ''}`} onClick={() => setView('payments')}>
+            <WalletCards size={18} /><span>Payments & Escrow</span>
+          </button>
+          <div className="buyer-sidebar-note">
+            <ShieldCheck size={16} />
+            <div>
+              <strong>KrishiSetu Protected</strong>
+              <p>Escrow payment released only after quality acceptance.</p>
             </div>
           </div>
         </aside>
         <main className="buyer-main">
-          {view === 'shop' && <RetailShop cartCount={cartItems.reduce((acc, i) => acc + i.quantity, 0)} onAdd={handleAddToCart} onOpenCart={() => setIsCartOpen(true)} onNotify={notify} />}
+          {view === 'shop' && <RetailShop onNotify={notify} onAddToCart={handleAddToCart} />}
           {view === 'orders' && <RetailOrders onNotify={notify} />}
           {view === 'payments' && <BuyerPayments type="retail" />}
         </main>
       </div>
-      
+
+      {/* Floating Cart Button */}
+      {cartItems.length > 0 && (
+        <button 
+          onClick={() => setIsCartOpen(true)}
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            background: '#16a34a',
+            color: '#fff',
+            padding: '12px 20px',
+            borderRadius: '50px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            boxShadow: '0 4px 15px rgba(22, 163, 74, 0.4)',
+            zIndex: 90,
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: 600
+          }}
+        >
+          <ShoppingCart size={20} />
+          <span>View Cart ({cartItems.reduce((sum, item) => sum + item.quantity, 0)})</span>
+          <span style={{ background: '#15803d', padding: '2px 8px', borderRadius: '12px', fontSize: '13px' }}>
+            ₹{totalCartAmount}
+          </span>
+        </button>
+      )}
+
+      {/* Cart Drawer */}
       {isCartOpen && (
-        <CartModal 
+        <CartDrawer 
           items={cartItems} 
           onClose={() => setIsCartOpen(false)} 
-          onCheckout={handleCheckout} 
-          onUpdateQuantity={(name, delta) => {
-            setCartItems(prev => prev.map(i => i.name === name ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i).filter(i => i.quantity > 0));
+          onUpdateQuantity={handleUpdateQuantity}
+          onCheckout={() => {
+            setIsCartOpen(false);
+            setCartItems([]);
+            notify('Order placed successfully! Funds secured in escrow.');
+            setView('orders');
           }}
         />
       )}
@@ -287,53 +418,39 @@ function RetailBuyerDashboard({ onSwitch }: BuyerShellProps) {
   );
 }
 
-function CartModal({ items, onClose, onCheckout, onUpdateQuantity }: { items: CartItemData[], onClose: () => void, onCheckout: () => void, onUpdateQuantity: (name: string, delta: number) => void }) {
-  const total = items.reduce((acc, item) => acc + (item.priceNum * item.quantity), 0);
+function CartDrawer({ items, onClose, onUpdateQuantity, onCheckout }: { items: CartItemData[]; onClose: () => void; onUpdateQuantity: (name: string, delta: number) => void; onCheckout: () => void }) {
+  const total = items.reduce((sum, item) => sum + item.priceNum * item.quantity, 0);
 
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
-      <div className="listing-modal" style={{ maxWidth: '400px', padding: 0 }} onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head" style={{ padding: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-          <div>
-            <span className="eyebrow">Your Basket</span>
-            <h2>Checkout</h2>
-          </div>
-          <button className="close-button" onClick={onClose}><X size={19} /></button>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ width: 'min(400px, 100%)', background: '#fff', height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Your Cart ({items.length})</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
         </div>
-        <div style={{ padding: '1.5rem', maxHeight: '400px', overflowY: 'auto' }}>
-          {items.length === 0 ? (
-            <p style={{ textAlign: 'center', color: '#64748b' }}>Your cart is empty.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {items.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '0.95rem' }}>{item.name}</h4>
-                    <small style={{ color: '#64748b' }}>₹{item.priceNum} / kg</small>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <button onClick={() => onUpdateQuantity(item.name, -1)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '4px', width: '24px', height: '24px', cursor: 'pointer' }}>-</button>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{item.quantity}</span>
-                    <button onClick={() => onUpdateQuantity(item.name, 1)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '4px', width: '24px', height: '24px', cursor: 'pointer' }}>+</button>
-                  </div>
-                  <strong style={{ minWidth: '60px', textAlign: 'right' }}>₹{item.priceNum * item.quantity}</strong>
-                </div>
-              ))}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {items.map(item => (
+            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.75rem' }}>
+              <div>
+                <strong style={{ display: 'block', fontSize: '0.95rem' }}>{item.name}</strong>
+                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>₹{item.priceNum} / unit</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button onClick={() => onUpdateQuantity(item.name, -1)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '4px', width: '24px', height: '24px', cursor: 'pointer' }}>-</button>
+                <span style={{ fontSize: '0.9rem', fontWeight: 500, minWidth: '16px', textAlign: 'center' }}>{item.quantity}</span>
+                <button onClick={() => onUpdateQuantity(item.name, 1)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '4px', width: '24px', height: '24px', cursor: 'pointer' }}>+</button>
+              </div>
+              <strong style={{ minWidth: '60px', textAlign: 'right' }}>₹{item.priceNum * item.quantity}</strong>
             </div>
-          )}
+          ))}
         </div>
-        <div style={{ padding: '1.5rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderRadius: '0 0 12px 12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', fontSize: '1.1rem' }}>
-            <strong>Total</strong>
-            <strong>₹{total}</strong>
+        <div style={{ padding: '1.25rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', fontWeight: 700, fontSize: '1.1rem' }}>
+            <span>Total:</span>
+            <span>₹{total}</span>
           </div>
-          <button 
-            className="primary-button" 
-            style={{ width: '100%', justifyContent: 'center' }} 
-            onClick={onCheckout}
-            disabled={items.length === 0}
-          >
-            <ShieldCheck size={18} /> Checkout Securely
+          <button onClick={onCheckout} className="primary-button" style={{ width: '100%', justifyContent: 'center', padding: '0.8rem' }}>
+            Proceed to Escrow Checkout
           </button>
         </div>
       </div>
@@ -341,337 +458,380 @@ function CartModal({ items, onClose, onCheckout, onUpdateQuantity }: { items: Ca
   );
 }
 
-function RetailShop({ cartCount, onAdd, onOpenCart, onNotify }: { cartCount: number; onAdd: (name: string, price: string) => void; onOpenCart: () => void; onNotify: (message: string) => void }) {
+function RetailShop({ onNotify, onAddToCart }: { onNotify: (message: string) => void; onAddToCart: (name: string, price: string) => void }) {
+  const [activeCategory, setActiveCategory] = useState('All');
+  const [search, setSearch] = useState('');
+  const [remoteListings, setRemoteListings] = useState<ListingItem[]>([]);
+
+  useEffect(() => {
+    const fetchMarket = async () => {
+      try {
+        const data = await api.getMarketplace();
+        if (data && data.listings) setRemoteListings(data.listings);
+      } catch (e) {
+        console.warn('Could not sync remote marketplace listings:', e);
+      }
+    };
+    fetchMarket();
+  }, []);
+
+  const categories = ['All', 'Vegetables', 'Fruits', 'Grains & pulses', 'Spices'];
+
+  const products = [
+    { name: 'Fresh Farm Tomatoes', variety: 'Arka Rakshak', category: 'Vegetables', grade: 'A', price: '₹42 / kg', minOrder: '50 kg', farmer: 'Ramesh Kumar', location: 'Nashik, Maharashtra', harvest: 'Today', verified: true, rating: '4.8', deals: '12 orders this week' },
+    { name: 'Red Onions (Grade A)', variety: 'N-53', category: 'Vegetables', grade: 'A', price: '₹34 / kg', minOrder: '100 kg', farmer: 'Sunita Patil', location: 'Pune, Maharashtra', harvest: 'Yesterday', verified: true, rating: '4.9', deals: '34 orders this week' },
+    { name: 'Sharbati Wheat Grain', variety: 'C-306', category: 'Grains & pulses', grade: 'A', price: '₹2,650 / q', minOrder: '1 quintal', farmer: 'Gurpreet Singh', location: 'Ludhiana, Punjab', harvest: '3 days ago', verified: true, rating: '4.7', deals: '8 orders this week' },
+    { name: 'Green Bell Peppers', variety: 'Indra', category: 'Vegetables', grade: 'B', price: '₹58 / kg', minOrder: '40 kg', farmer: 'Devendra Yadav', location: 'Indore, MP', harvest: 'Today', verified: true, rating: '4.6', deals: '6 orders this week' },
+    { name: 'Fresh Green Chillies', variety: 'Guntur Sannam', category: 'Spices', grade: 'A', price: '₹92 / kg', minOrder: '20 kg', farmer: 'K. Venkatesh', location: 'Guntur, AP', harvest: 'Today', verified: true, rating: '5.0', deals: '19 orders this week' },
+    { name: 'Kufri Jyoti Potatoes', variety: 'Table Grade', category: 'Vegetables', grade: 'B', price: '₹22 / kg', minOrder: '150 kg', farmer: 'Mahesh Verma', location: 'Agra, UP', harvest: '2 days ago', verified: false, rating: '4.4', deals: '15 orders this week' },
+  ];
+
+  const filtered = products
+    .filter(p => activeCategory === 'All' || p.category === activeCategory)
+    .filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.farmer.toLowerCase().includes(search.toLowerCase()) || p.location.toLowerCase().includes(search.toLowerCase()));
+
   return (
     <>
-      <div className="buyer-page-heading">
-        <div>
-          <p className="eyebrow">Fresh from 248 farms near Nashik</p>
-          <h1>Good morning, Ananya</h1>
-          <p>Better produce, fair prices, and a clear journey from farm to your kitchen.</p>
-        </div>
-        <button className="cart-button" onClick={onOpenCart}>
-          <ShoppingCart size={17} /> Cart <b>{cartCount}</b>
-        </button>
-      </div>
       <div className="retail-banner">
         <div>
-          <span className="section-kicker"><ShieldCheck size={14} /> Quality you can see</span>
-          <h2>Farm-grade produce, delivered honestly.</h2>
-          <p>Every item is AI graded, farmer-priced, and picked up fresh.</p>
-          <button className="banner-link" onClick={() => onNotify('Showing all quality-verified produce')}>Explore verified produce <ArrowRight size={15} /></button>
+          <span className="eyebrow">Direct from farm gates</span>
+          <h1>Farm-fresh wholesale & retail produce</h1>
+          <p>Graded quality, direct farm pricing, backed by automated escrow protection.</p>
         </div>
-        <div className="banner-stamp">
-          <BadgeCheck size={22} /><strong>100%</strong><span>traceable</span>
+        <div className="banner-stats">
+          <div><strong>₹0</strong><span>Middlemen margin</span></div>
+          <div><strong>100%</strong><span>Escrow protected</span></div>
+          <div><strong>Grade A/B</strong><span>Lab checked</span></div>
         </div>
       </div>
-      <div className="shop-toolbar">
-        <div><h2>Popular near you</h2><p>Available for pickup today</p></div>
-        <button className="filter-button"><SlidersHorizontal size={15} /> Filters</button>
+
+      <div className="buyer-search-bar">
+        <Search size={18} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search vegetables, grains, farmer names, mandi regions..." />
+        {search && <button onClick={() => setSearch('')} className="search-clear"><X size={16} /></button>}
       </div>
-      <div className="product-grid">
-        {[
-          ['Tomatoes','Arka Rakshak','₹42','Grade A','4.9','Tomato'],
-          ['Onions','N-53','₹31','Grade B','4.8','Onion'],
-          ['Wheat','Lokwan','₹48','Grade A','4.9','Wheat'],
-          ['Spinach','Palak','₹28','Grade A','4.7','Spinach']
-        ].map(([name, variety, price, grade, rating, key], index) => (
-          <ProductCard 
-            key={name} 
-            name={name} 
-            variety={variety} 
-            price={price} 
-            grade={grade} 
-            rating={rating} 
-            crop={key} 
-            onAdd={() => onAdd(name, price)} 
-            onView={() => onNotify(`${name} details opened`)} 
-          />
+
+      <div className="category-tabs">
+        {categories.map(c => (
+          <button key={c} className={activeCategory === c ? 'active' : ''} onClick={() => setActiveCategory(c)}>
+            {c}
+          </button>
         ))}
       </div>
-      <div className="trace-strip">
-        <MapPin size={16} />
-        <span><strong>Know your farmer</strong> Your order supports 12 local farms within 25 km of your delivery point.</span>
-        <ArrowRight size={15} />
+
+      <div className="product-grid">
+        {filtered.map(p => (
+          <div className="product-card" key={p.name}>
+            <div className="product-top">
+              <span className={`grade-badge grade-${p.grade.toLowerCase()}`}>Grade {p.grade}</span>
+              <span className="product-deal">{p.deals}</span>
+            </div>
+            <div className="product-header">
+              <h3>{p.name}</h3>
+              <p>{p.variety} · Min {p.minOrder}</p>
+            </div>
+            <div className="product-farmer">
+              <div className="farmer-avatar">{p.farmer.split(' ').map(n => n[0]).join('')}</div>
+              <div>
+                <strong>{p.farmer} {p.verified && <BadgeCheck size={14} className="verified-badge" />}</strong>
+                <p><MapPin size={12} /> {p.location}</p>
+              </div>
+            </div>
+            <div className="product-footer">
+              <div>
+                <span className="price-label">Farm gate price</span>
+                <strong>{p.price}</strong>
+              </div>
+              <button className="primary-button" onClick={() => onAddToCart(p.name, p.price)}>
+                <ShoppingCart size={15} /> Buy now
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </>
   );
 }
 
-function ProductCard({ name, variety, price, grade, rating, crop, onAdd, onView }: { name: string; variety: string; price: string; grade: string; rating: string; crop: string; onAdd: () => void; onView: () => void }) { 
-  return (
-    <article className="product-card">
-      <div className={`product-visual crop-${crop.toLowerCase()}`}>
-        <span className="product-grade">{grade}</span>
-        <span className="heart-button" onClick={onView}>♡</span>
-        <div className="crop-illustration">
-          {crop === 'Spinach' ? <Leaf size={44} /> : <Wheat size={44} />}
-        </div>
-      </div>
-      <div className="product-content">
-        <div className="product-meta"><span>AI {grade}</span><span>★ {rating}</span></div>
-        <h3>{name}</h3>
-        <p>{variety} · farm fresh</p>
-        <div className="product-bottom">
-          <div><strong>{price}</strong><small>/ kg</small></div>
-          <button onClick={onAdd}><Plus size={16} /></button>
-        </div>
-      </div>
-    </article>
-  ); 
-}
-
 function RetailOrders({ onNotify }: { onNotify: (message: string) => void }) {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [remoteOrders, setRemoteOrders] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await api.getOrders();
-        setOrders(res.orders);
+        const data = await api.getOrders();
+        if (data && data.orders) setRemoteOrders(data.orders);
       } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
+        console.warn('Could not sync orders:', e);
       }
     };
     fetchOrders();
   }, []);
 
-  const handleDelivery = async (orderId: string, pickupOtp: string, deliveryOtp: string) => {
-    try {
-      await api.deliverOrder(orderId, pickupOtp, deliveryOtp);
-      onNotify('Delivery verified! Escrow payment has been released.');
-      setOrders(current => current.map(o => o.id === orderId ? { ...o, status: 'COMPLETED' } : o));
-    } catch (e) {
-      console.error(e);
-      onNotify('Failed to verify delivery.');
-    }
-  };
-
-  const activeCount = orders.filter(o => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
-  const completedCount = orders.filter(o => o.status === 'COMPLETED').length;
+  const orders = [
+    { id: '#KS-8902', crop: 'Fresh Farm Tomatoes', qty: '120 kg', total: '₹5,040', status: 'In Transit', driver: 'Suresh Yadav', truck: 'MH-12-AB-3421', eta: 'Today, 4:30 PM', otp: '4821', escrow: 'Secured' },
+    { id: '#KS-8841', crop: 'Red Onions (Grade A)', qty: '250 kg', total: '₹8,500', status: 'Delivered', driver: 'Mahesh Rao', truck: 'MH-14-CC-9011', eta: 'Yesterday', otp: 'Completed', escrow: 'Released to farmer' },
+  ];
 
   return (
     <>
-      <PageHeading eyebrow="Your shopping" title="My orders" description="Track your farm-fresh deliveries and pickup codes." />
-      <div className="order-summary-row">
-        <div><span>Active orders</span><strong>{activeCount}</strong></div>
-        <div><span>Completed</span><strong>{completedCount}</strong></div>
-        <div><span>Secured via Escrow</span><strong><ShieldCheck size={14} style={{display:'inline', marginBottom:'-2px'}}/> Protected</strong></div>
-      </div>
-      <div className="buyer-order-list card">
-        <div className="card-title-row">
-          <div><h2>Active orders</h2><p>Every order is protected until handover</p></div>
-          <span className="live-pill"><i /> Live</span>
+      <div className="buyer-page-heading">
+        <div>
+          <span className="eyebrow">Track and manage</span>
+          <h1>My orders</h1>
+          <p>Monitor your active dispatches, transit status and delivery OTPs.</p>
         </div>
-        {loading ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Loading orders...</div>
-        ) : orders.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No orders placed yet.</div>
-        ) : (
-          orders.map((o) => (
-            <div className={`buyer-order ${o.status === 'COMPLETED' ? 'completed' : ''}`} key={o.id}>
-              <span className={`order-thumb crop-${(o.crop_name || 'produce').toLowerCase()}`}><Wheat size={22} /></span>
-              <div style={{flex: 1}}>
-                <strong>#{o.id.slice(-6).toUpperCase()} · {o.crop_name || 'Produce'}</strong>
-                <p>{o.quantity} {o.unit || 'kg'} · From Farmer</p>
-                <small>{o.status === 'COMPLETED' ? 'Delivered successfully' : o.status === 'IN_TRANSIT' ? 'In transit to your location' : 'Waiting for pickup'}</small>
-              </div>
-              <span className="order-price">₹{o.total_amount}</span>
-              {o.status === 'COMPLETED' ? (
-                <span style={{color: '#16a34a', fontWeight: 'bold'}}>DELIVERED</span>
-              ) : (
-                <button className="primary-button" onClick={() => {
-                  const pickupOtp = prompt('Enter Farmer OTP (from pickup):');
-                  const deliveryOtp = prompt(`Enter YOUR Delivery OTP (${o.delivery_otp}):`, o.delivery_otp);
-                  if (pickupOtp && deliveryOtp) {
-                    handleDelivery(o.id, pickupOtp, deliveryOtp);
-                  }
-                }}>Confirm Delivery</button>
-              )}
-            </div>
-          ))
-        )}
       </div>
-    </>
-  );
-}
 
-function BulkBuyerDashboard({ onSwitch }: BuyerShellProps) { const [view, setView] = useState<'desk' | 'lots' | 'contracts' | 'payments'>('desk'); const [toast, setToast] = useState(''); const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(''), 2600); }; return <div className="buyer-app bulk-app"><BuyerHeader type="bulk" onSwitch={onSwitch} onNotify={notify} /><div className="buyer-body"><aside className="buyer-sidebar"><p className="nav-label">PROCUREMENT DESK</p><button className={view === 'desk' ? 'buyer-nav active' : 'buyer-nav'} onClick={() => setView('desk')}><LayoutDashboard size={18} /> Procurement overview</button><button className={view === 'lots' ? 'buyer-nav active' : 'buyer-nav'} onClick={() => setView('lots')}><Wheat size={18} /> Browse farm lots <b>24</b></button><button className={view === 'contracts' ? 'buyer-nav active' : 'buyer-nav'} onClick={() => setView('contracts')}><FileText size={18} /> My contracts</button><button className={view === 'payments' ? 'buyer-nav active' : 'buyer-nav'} onClick={() => setView('payments')}><WalletCards size={18} /> Escrow & payments</button><div className="buyer-sidebar-foot"><button className="buyer-nav"><CircleHelp size={18} /> Procurement support</button><div className="buyer-trust amber-trust"><ShieldCheck size={17} /><span><strong>Escrow protected</strong><small>Release only after dual OTP</small></span></div></div></aside><main className="buyer-main">{view === 'desk' && <BulkDesk onNotify={notify} onNavigate={setView} />}{view === 'lots' && <BulkLots onNotify={notify} />}{view === 'contracts' && <Contracts onNotify={notify} />}{view === 'payments' && <BuyerPayments type="bulk" />}</main></div>{toast && <div className="toast"><ShieldCheck size={18} />{toast}</div>}</div>; }
-
-function BulkDesk({ onNotify, onNavigate }: { onNotify: (message: string) => void; onNavigate: (view: 'lots' | 'contracts' | 'payments') => void }) { return <><div className="buyer-page-heading"><div><p className="eyebrow">Wednesday, 10 September 2026 · Mumbai region</p><h1>Good morning, Shakti Foods</h1><p>Your procurement desk is ready. Source better, plan further ahead.</p></div><button className="primary-button" onClick={() => onNavigate('lots')}><Search size={17} /> Browse farm lots</button></div><section className="stat-grid"><StatCard label="Active sourcing" value="8,420 kg" change="24 open lots" icon={<Wheat size={20} />} /><StatCard label="Live bids" value="12" change="3 ending today" positive icon={<Zap size={20} />} /><StatCard label="In escrow" value="₹2,84,600" change="7 protected orders" warning icon={<ShieldCheck size={20} />} /><StatCard label="Active contracts" value="6" change="Across 4 crops" icon={<FileText size={20} />} /></section><div className="bulk-hero"><div><span className="section-kicker"><Zap size={14} /> Smart sourcing signal</span><h2>Onion prices soften by 8% this week</h2><p>Great time to lock a 30-day supply contract from Nashik farms.</p><button className="banner-link" onClick={() => onNavigate('lots')}>See matching farm lots <ArrowRight size={15} /></button></div><div className="signal-chart"><ArrowDownRight size={30} /><strong>-8.2%</strong><small>projected rate</small></div></div><div className="bulk-lower"><div className="card"><div className="card-title-row"><div><h2>Offers needing attention</h2><p>Live farmer listings matched to your needs</p></div><button className="text-button" onClick={() => onNavigate('lots')}>View all <ChevronRight size={15} /></button></div><BulkOffer crop="Wheat" detail="1,200 kg · Grade A · Nashik" price="₹2,450 / q" time="Ends in 04:28:16" onClick={() => onNotify('Opening wheat bidding room')} /><BulkOffer crop="Onion" detail="3,000 kg · Grade A · Ahmednagar" price="₹2,860 / q" time="New today" onClick={() => onNotify('Opening onion listing')} /></div><div className="card contract-summary"><div className="card-title-row"><div><h2>Contract health</h2><p>Your supply commitments</p></div><HandshakeIcon /></div><div className="contract-meter"><div><strong>94%</strong><span>on time fulfillment</span></div><div className="meter"><i /></div></div><div className="contract-mini"><span><i className="green-dot" /> 4 On track</span><span><i className="amber-dot" /> 2 renewing soon</span></div><button className="outline-button" onClick={() => onNavigate('contracts')}>Manage contracts <ChevronRight size={15} /></button></div></div></>; }
-
-function HandshakeIcon() { return <span className="handshake-icon"><UsersRound size={20} /></span>; }
-function BulkOffer({ crop, detail, price, time, onClick }: { crop: string; detail: string; price: string; time: string; onClick: () => void }) { return <button className="bulk-offer" onClick={onClick}><span className="crop-icon"><Wheat size={18} /></span><span><strong>{crop}</strong><small>{detail}</small></span><span className="offer-rate"><small>Current best</small><b>{price}</b></span><span className="offer-time"><Clock3 size={13} />{time}</span><ChevronRight size={17} /></button>; }
-
-function BulkLots({ onNotify }: { onNotify: (message: string) => void }) {
-  const [listings, setListings] = useState<ListingItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [biddingOn, setBiddingOn] = useState<ListingItem | null>(null);
-
-  useEffect(() => {
-    const fetchListings = async () => {
-      try {
-        if (!api.getToken()) {
-          try {
-            await api.login('+919999999999', 'password123'); // Bulk buyer demo
-          } catch {
-            await api.register({
-              name: 'Shakti Foods',
-              phone: '+919999999999',
-              role: 'buyer',
-              language: 'en',
-            });
-          }
-        }
-        const data = await api.getMarketplaceListings();
-        setListings(data.listings);
-      } catch (err) {
-        console.error("Failed to load marketplace listings:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchListings();
-  }, []);
-
-  const handlePlaceBid = async (price: number, quantity: number) => {
-    if (!biddingOn) return;
-    try {
-      await api.placeBid({
-        listing_id: biddingOn.id,
-        price_per_unit: price,
-        quantity: quantity,
-      });
-      onNotify(`Bid of ₹${price}/kg placed successfully on ${biddingOn.crop_name}`);
-      setBiddingOn(null);
-    } catch (err) {
-      console.error(err);
-      onNotify('Failed to place bid. You may already have an active bid.');
-      setBiddingOn(null);
-    }
-  };
-
-  return (
-    <>
-      <PageHeading eyebrow="Sourcing marketplace" title="Browse farm lots" description="Verified crop lots from farmers you can build a relationship with." action={<button className="filter-button"><SlidersHorizontal size={15} /> Filters</button>} />
-      <div className="lot-toolbar">
-        <div className="tabs">
-          <button className="active">Recommended <b>{listings.length}</b></button>
-          <button>Ending soon</button>
-          <button>By region</button>
-        </div>
-        <span><Cloud size={14} /> Live inventory</span>
-      </div>
-      
-      {loading ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Loading live marketplace...</div>
-      ) : listings.length === 0 ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No live listings found.</div>
-      ) : (
-        <div className="lot-grid">
-          {listings.map((item) => (
-            <div className="lot-card card" key={item.id}>
-              <div className="lot-top">
-                <span className="crop-icon"><Wheat size={20} /></span>
-                <span className="route bulk">Bulk lot</span>
-              </div>
-              <h3>{item.crop_name} <small>{item.variety || 'Local'}</small></h3>
-              <div className="lot-info">
-                <span><Package size={13} /> {item.quantity} {item.unit}</span>
-                <span><BadgeCheck size={13} /> Grade {item.quality?.grade || 'A'}</span>
-                <span><MapPin size={13} /> {item.location ? 'Nearby' : 'Nashik'}</span>
-              </div>
-              <div className="lot-bottom">
-                <div>
-                  <small>Starting price</small>
-                  <strong>₹{item.pricing?.minimum_price} / {item.unit}</strong>
+      <div className="buyer-orders-list">
+        {orders.map(o => (
+          <div className="buyer-order card" key={o.id}>
+            <div className="order-main-info">
+              <div className="order-icon-wrap"><Truck size={20} /></div>
+              <div>
+                <div className="order-title-row">
+                  <strong>{o.crop}</strong>
+                  <span className={`order-status-pill ${o.status.toLowerCase().replace(' ', '-')}`}>{o.status}</span>
                 </div>
-                <button className="accept-button" onClick={() => setBiddingOn(item)}>View & bid</button>
+                <p>{o.id} · {o.qty} · Vehicle: {o.truck} · Driver: {o.driver}</p>
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {biddingOn && (
-        <BidModal 
-          listing={biddingOn} 
-          onClose={() => setBiddingOn(null)} 
-          onSubmit={handlePlaceBid} 
-        />
-      )}
+            <div className="order-price">
+              <strong>{o.total}</strong>
+              <small><ShieldCheck size={13} /> Escrow: {o.escrow}</small>
+            </div>
+            {o.status === 'In Transit' ? (
+              <div className="order-actions">
+                <div className="otp-box">
+                  <small>Share OTP at delivery:</small>
+                  <strong>{o.otp}</strong>
+                </div>
+                <button className="primary-button" onClick={() => onNotify(`Order ${o.id} delivery accepted! Escrow released to farmer.`)}>
+                  Accept delivery
+                </button>
+              </div>
+            ) : (
+              <div className="order-actions">
+                <button className="outline-button" onClick={() => onNotify(`Receipt for ${o.id} downloaded.`)}>
+                  View receipt
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </>
   );
 }
 
-function BidModal({ listing, onClose, onSubmit }: { listing: ListingItem, onClose: () => void, onSubmit: (price: number, qty: number) => void }) {
-  const [price, setPrice] = useState(listing.pricing?.minimum_price?.toString() || '30');
-  const [qty, setQty] = useState(listing.quantity?.toString() || '100');
+function BulkBuyerDashboard({ onSwitch }: BuyerShellProps) {
+  const [view, setView] = useState<'lots' | 'contracts' | 'payments'>('lots');
+  const [toast, setToast] = useState('');
+
+  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(''), 2600); };
 
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
-      <div className="listing-modal" style={{ maxWidth: '440px' }} onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head">
-          <div>
-            <span className="eyebrow">Live Auction Room</span>
-            <h2>Place Bid: {listing.crop_name}</h2>
-          </div>
-          <button className="close-button" onClick={onClose}><X size={19} /></button>
-        </div>
-        
-        <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
-          <p style={{ margin: '0 0 0.5rem 0', color: '#475569' }}><strong>Farmer:</strong> {listing.farmer_name || 'Verified Farmer'}</p>
-          <p style={{ margin: '0 0 0.5rem 0', color: '#475569' }}><strong>Available:</strong> {listing.quantity} {listing.unit} (Grade {listing.quality?.grade || 'A'})</p>
-          <p style={{ margin: 0, color: '#475569' }}><strong>Min Price:</strong> ₹{listing.pricing?.minimum_price} / {listing.unit}</p>
-        </div>
-
-        <div className="form-grid">
-          <label>
-            Your Bid Price (₹ / {listing.unit})
-            <div className="input-wrap">
-              <input type="number" value={price} onChange={e => setPrice(e.target.value)} min={listing.pricing?.minimum_price} />
-            </div>
-          </label>
-          <label>
-            Quantity Needed ({listing.unit})
-            <div className="input-wrap">
-              <input type="number" value={qty} onChange={e => setQty(e.target.value)} max={listing.quantity} />
-            </div>
-          </label>
-        </div>
-
-        <div className="modal-actions" style={{ marginTop: '2rem' }}>
-          <button className="cancel-button" onClick={onClose}>Cancel</button>
-          <button className="primary-button" onClick={() => onSubmit(Number(price), Number(qty))}>
-            <Zap size={17} /> Place Bid Securely
+    <div className="buyer-layout">
+      <BuyerHeader type="bulk" onSwitch={onSwitch} onNotify={notify} />
+      <div className="buyer-body">
+        <aside className="buyer-sidebar">
+          <p className="nav-label">PROCUREMENT DESK</p>
+          <button className={`buyer-nav-item ${view === 'lots' ? 'active' : ''}`} onClick={() => setView('lots')}>
+            <Building2 size={18} /><span>Live lots & reverse bids</span><b>5</b>
           </button>
-        </div>
+          <button className={`buyer-nav-item ${view === 'contracts' ? 'active' : ''}`} onClick={() => setView('contracts')}>
+            <FileText size={18} /><span>Contract farming</span>
+          </button>
+          <button className={`buyer-nav-item ${view === 'payments' ? 'active' : ''}`} onClick={() => setView('payments')}>
+            <WalletCards size={18} /><span>Escrow accounts</span>
+          </button>
+          <div className="buyer-sidebar-note">
+            <Zap size={16} />
+            <div>
+              <strong>Institutional SLA</strong>
+              <p>Direct supply contracts, moisture test reports, multi-truck logistics.</p>
+            </div>
+          </div>
+        </aside>
+        <main className="buyer-main">
+          {view === 'lots' && <BulkLots onNotify={notify} />}
+          {view === 'contracts' && <BulkContracts onNotify={notify} />}
+          {view === 'payments' && <BuyerPayments type="bulk" />}
+        </main>
       </div>
+      {toast && <div className="toast"><ShieldCheck size={18} />{toast}</div>}
     </div>
   );
 }
 
-function Contracts({ onNotify }: { onNotify: (message: string) => void }) { return <><PageHeading eyebrow="Long-term supply" title="My contracts" description="Reliable supply, clear terms, and one place for every commitment." action={<button className="primary-button" onClick={() => onNotify('New contract request started')}><Plus size={17} /> New request</button>} /><div className="contract-list card"><div className="card-title-row"><div><h2>Active supply contracts</h2><p>Renewals and fulfillment status</p></div><span className="status live"><i /> 6 active</span></div>{[['Wheat','Meera Farms','1,200 kg / month','₹2,450 / q','On track'],['Tomato','Ramesh Kumar','500 kg / week','₹42 / kg','Renewal soon'],['Onion','Sahyadri Collective','3,000 kg / month','₹2,860 / q','On track']].map(([crop, farmer, qty, price, status]) => <div className="contract-row" key={crop}><span className="crop-icon"><Wheat size={18} /></span><div><strong>{crop} · {farmer}</strong><small>{qty} · {price}</small></div><span className={status === 'On track' ? 'status live' : 'status pending'}><i />{status}</span><button className="more-button" onClick={() => onNotify(`Opened ${crop} contract details`)}>View</button></div>)}</div><div className="contract-note"><ShieldCheck size={18} /><span><strong>Every contract is escrow backed.</strong> Funds lock at confirmation and release only after dual OTP handover.</span></div></>; }
+function BulkLots({ onNotify }: { onNotify: (message: string) => void }) {
+  const [biddingLot, setBiddingLot] = useState<string | null>(null);
+  const [bidAmount, setBidAmount] = useState('2420');
+
+  const lots = [
+    { id: 'LOT-WHT-092', crop: 'Lokwan Milling Wheat', volume: '45 Metric Tonnes (450 q)', location: 'Kota Mandi, Rajasthan', basePrice: '₹2,380 / q', currentBid: '₹2,420 / q', moisture: '10.8%', bidderCount: 6, timeLeft: '02h 15m' },
+    { id: 'LOT-SOY-114', crop: 'Yellow Soybean Grade 1', volume: '30 Metric Tonnes (300 q)', location: 'Indore Mandi, MP', basePrice: '₹4,650 / q', currentBid: '₹4,780 / q', moisture: '9.5%', bidderCount: 9, timeLeft: '00h 48m' },
+    { id: 'LOT-MAZ-058', crop: 'Industrial Maize / Corn', volume: '60 Metric Tonnes (600 q)', location: 'Davangere, Karnataka', basePrice: '₹2,100 / q', currentBid: '₹2,180 / q', moisture: '12.0%', bidderCount: 4, timeLeft: '04h 30m' },
+  ];
+
+  return (
+    <>
+      <div className="bulk-hero">
+        <div>
+          <span className="eyebrow">Institutional procurement</span>
+          <h1>Direct farm aggregation & spot mandi bidding</h1>
+          <p>Participate in live farm-gate auctions with automated lab assays and batch escrow.</p>
+        </div>
+        <div className="banner-stats">
+          <div><strong>450 MT</strong><span>Available today</span></div>
+          <div><strong>9 Mandis</strong><span>Connected</span></div>
+          <div><strong>NABL</strong><span>Assayed labs</span></div>
+        </div>
+      </div>
+
+      <div className="bulk-tabs-row">
+        <h2>Live wholesale auction lots</h2>
+        <span className="live-pulse"><i /> Live trading open</span>
+      </div>
+
+      <div className="lot-grid">
+        {lots.map(l => (
+          <div className="lot-card" key={l.id}>
+            <div className="lot-top">
+              <span className="lot-id">{l.id}</span>
+              <span className="lot-timer"><Clock3 size={14} /> {l.timeLeft}</span>
+            </div>
+            <h3>{l.crop}</h3>
+            <p className="lot-volume">{l.volume}</p>
+            <div className="lot-specs">
+              <div><span>Moisture</span><strong>{l.moisture}</strong></div>
+              <div><span>Location</span><strong>{l.location.split(',')[0]}</strong></div>
+              <div><span>Active bids</span><strong>{l.bidderCount} buyers</strong></div>
+            </div>
+            <div className="lot-bidding">
+              <div>
+                <span className="price-label">Highest active bid</span>
+                <strong className="lot-price">{l.currentBid}</strong>
+              </div>
+              <button className="primary-button" onClick={() => setBiddingLot(l.id)}>
+                <Zap size={15} /> Place bid
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {biddingLot && (
+        <div className="modal-backdrop">
+          <div className="modal card" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Direct institutional auction</p>
+                <h2>Place counter bid</h2>
+                <p>Selected Lot: <strong>{biddingLot}</strong></p>
+              </div>
+              <button className="icon-button" onClick={() => setBiddingLot(null)}><X size={18} /></button>
+            </div>
+            <div className="bid-form">
+              <label>Your bid price (per quintal)</label>
+              <div className="price-input">
+                <span>₹</span>
+                <input type="number" value={bidAmount} onChange={e => setBidAmount(e.target.value)} />
+              </div>
+              <div className="escrow-notice">
+                <ShieldCheck size={16} />
+                <p>A refundable 2% earnest deposit (₹{(parseInt(bidAmount || '0') * 9).toLocaleString()}) will be reserved in your DMS escrow.</p>
+              </div>
+              <div className="modal-actions">
+                <button className="outline-button" onClick={() => setBiddingLot(null)}>Cancel</button>
+                <button className="primary-button" onClick={() => { onNotify(`Bid of ₹${bidAmount}/q placed on ${biddingLot}`); setBiddingLot(null); }}>
+                  Confirm bid
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function BulkContracts({ onNotify }: { onNotify: (message: string) => void }) {
+  return (
+    <>
+      <div className="buyer-page-heading">
+        <div>
+          <span className="eyebrow">Advance procurement</span>
+          <h1>Contract farming & buyback agreements</h1>
+          <p>Secure future harvest volumes with FPOs and farmer clusters at guaranteed pre-sowing prices.</p>
+        </div>
+        <button className="primary-button" onClick={() => onNotify('New procurement SLA proposal drafted.')}>
+          <Plus size={16} /> Create contract
+        </button>
+      </div>
+
+      <div className="contracts-grid">
+        <div className="contract-card card">
+          <div className="contract-status-row">
+            <span className="order-status-pill in-transit">Sowing active</span>
+            <span className="contract-tag">Kharif 2026</span>
+          </div>
+          <h3>Organic Basmati 1121 Paddy</h3>
+          <p>AgriGrow FPO (48 farmers) · Karnal Cluster, Haryana</p>
+          <div className="contract-meta">
+            <div><span>Committed volume</span><strong>120 Metric Tonnes</strong></div>
+            <div><span>Guaranteed minimum price</span><strong>₹3,850 / q</strong></div>
+            <div><span>Expected harvest window</span><strong>15 - 30 Oct 2026</strong></div>
+          </div>
+          <div className="contract-footer">
+            <span className="escrow-badge"><ShieldCheck size={14} /> 25% Advance in Escrow</span>
+            <button className="outline-button" onClick={() => onNotify('Viewing agreement SLA #AG-26-041')}>View agreement</button>
+          </div>
+        </div>
+
+        <div className="contract-card card">
+          <div className="contract-status-row">
+            <span className="order-status-pill live">Open for farmer join</span>
+            <span className="contract-tag">Rabi 2026-27</span>
+          </div>
+          <h3>Processing Quality Potato (Chip grade)</h3>
+          <p>SnackCraft Foods Ltd · Banaskantha Cluster, Gujarat</p>
+          <div className="contract-meta">
+            <div><span>Target volume</span><strong>300 Metric Tonnes</strong></div>
+            <div><span>Guaranteed price</span><strong>₹1,650 / q</strong></div>
+            <div><span>Seed & input support</span><strong>Included (Certified)</strong></div>
+          </div>
+          <div className="contract-footer">
+            <span className="escrow-badge"><ShieldCheck size={14} /> 100% Bank Guarantee</span>
+            <button className="outline-button" onClick={() => onNotify('Joining agreement SLA #SC-26-102')}>Join cluster</button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 function BuyerPayments({ type }: { type: 'retail' | 'bulk' }) {
   const [orders, setOrders] = useState<any[]>([]);
 
   useEffect(() => {
-    api.getOrders().then(res => setOrders(res.orders)).catch(console.error);
+    const fetchOrders = async () => {
+      try {
+        const data = await api.getOrders();
+        if (data && data.orders) setOrders(data.orders);
+      } catch (e) {
+        console.warn('Could not sync orders for payments:', e);
+      }
+    };
+    fetchOrders();
   }, []);
 
-  const totalEscrow = orders.filter(o => o.status !== 'COMPLETED' && o.status !== 'CANCELLED')
-    .reduce((sum, o) => sum + o.total_amount, 0);
-
-  const totalReleased = orders.filter(o => o.status === 'COMPLETED')
-    .reduce((sum, o) => sum + o.total_amount, 0);
+  const totalEscrow = type === 'bulk' ? 142800 : 5040;
+  const totalReleased = type === 'bulk' ? 528000 : 18450;
 
   return (
     <>
-      <PageHeading eyebrow="Secure payments" title={type === 'bulk' ? 'Escrow & payments' : 'Payments'} description={type === 'bulk' ? 'Track protected funds across every farmer relationship.' : 'Your protected orders and saved payment methods.'} />
+      <PageHeading eyebrow="Payments & Security" title="Escrow & transaction records" description={type === 'bulk' ? 'Institutional escrow balances, earnest money deposits and released payments.' : 'Your protected orders and saved payment methods.'} />
       <div className="buyer-payment-balance">
         <div>
           <span>{type === 'bulk' ? 'Funds in escrow' : 'Total spent this month'}</span>
@@ -725,464 +885,119 @@ function Overview({ onList, onNavigate, notify }: { onList: () => void; onNaviga
 function StatCard({ label, value, change, positive, warning, icon }: { label: string; value: string; change: string; positive?: boolean; warning?: boolean; icon: React.ReactNode }) { return <div className="stat-card"><div className={`stat-icon ${warning ? 'amber' : ''}`}>{icon}</div><div><p>{label}</p><strong>{value}</strong><span className={positive ? 'positive' : warning ? 'warning' : ''}>{positive && <ArrowUpRight size={13} />}{change}</span></div></div>; }
 function QuickAction({ icon, label, color, onClick }: { icon: React.ReactNode; label: string; color: string; onClick: () => void }) { return <button className="quick-action" onClick={onClick}><span className={`quick-icon ${color}`}>{icon}</span><span>{label}</span><ChevronRight size={16} /></button>; }
 function Activity({ icon, title, text, time, amount, amber }: { icon: React.ReactNode; title: string; text: string; time: string; amount?: string; amber?: boolean }) { return <div className="activity"><span className={`activity-icon ${amber ? 'amber' : ''}`}>{icon}</span><div><strong>{title}</strong><p>{text}</p><small>{time}</small></div>{amount && <b className={amber ? 'amber-text' : ''}>{amount}</b>}</div>; }
-function Service({ icon, title, text, action, onClick }: { icon: React.ReactNode; title: string; text: string; action: string; onClick: () => void }) { return <div className="service"><span className="service-icon">{icon}</span><div><strong>{title}</strong><p>{text}</p><button onClick={onClick}>{action} <ChevronRight size={14} /></button></div></div>; }
+function Service({ icon, title, text, action, onClick }: { icon: React.ReactNode; title: string; text: string; action: string; onClick: () => void }) { return <div className="service"><span className="service-icon">{icon}</span><div><strong>{title}</strong><p>{text}</p><button onClick={onClick}>{action} <ChevronRight size={13} /></button></div></div>; }
 
-function Inventory({ listings, onList }: { listings: Listing[]; onList: () => void }) { return <><PageHeading eyebrow="Your marketplace" title="My produce" description="Manage your live listings and track every order." action={<button className="primary-button" onClick={onList}><Plus size={18} /> New listing</button>} /><div className="filter-row"><div className="tabs"><button className="active">All produce <b>{listings.length}</b></button><button>Retail</button><button>Bulk</button></div><button className="filter-button">Filter & sort</button></div><div className="listing-table"><div className="table-header"><span>Produce</span><span>Route</span><span>Quantity</span><span>Price</span><span>Status</span><span /></div>{listings.map((item) => <div className="listing-row" key={`${item.crop}-${item.variety}`}><div className="produce-name"><span className="crop-icon"><Wheat size={18} /></span><div><strong>{item.crop}</strong><small>{item.variety} <em>Grade {item.grade}</em></small></div></div><span><label className={`route ${item.route.toLowerCase()}`}>{item.route}</label></span><span>{item.quantity}</span><span className="price">{item.price}</span><span><label className={`status ${item.status === 'Live' ? 'live' : 'pending'}`}><i />{item.status}</label></span><button className="row-more"><ChevronRight size={17} /></button></div>)}</div></>; }
+function Inventory({ listings, onList }: { listings: Listing[]; onList: () => void }) {
+  return <>
+    <PageHeading eyebrow="Manage listings" title="Your produce lots" description="Manage real-time prices, quantities and quality grading." action={<button className="primary-button" onClick={onList}><Plus size={18} /> Add new lot</button>} />
+    <div className="filter-pill-row"><button className="filter-pill active">All produce ({listings.length})</button><button className="filter-pill">Grade A</button><button className="filter-pill">Grade B</button><button className="filter-pill">Retail</button><button className="filter-pill">Bulk</button><button className="filter-pill icon-only"><SlidersHorizontal size={15} /></button></div>
+    <div className="card-table"><div className="table-head"><span>CROP & VARIETY</span><span>QUANTITY</span><span>ROUTE</span><span>GRADE</span><span>PRICE</span><span>STATUS</span><span>ACTIONS</span></div>{listings.map((item, index) => <div className="table-row" key={index}><div><strong>{item.crop}</strong><small>{item.variety}</small></div><span>{item.quantity}</span><span><span className={`route-tag ${item.route.toLowerCase()}`}>{item.route}</span></span><span><span className="grade-tag">{item.grade}</span></span><b>{item.price}</b><span><span className={`status-tag ${item.status.toLowerCase().replace(' ', '-')}`}>{item.status}</span></span><div><button className="ghost-button">Manage</button></div></div>)}</div>
+  </>;
+}
 
 function Orders({ notify }: { notify: (message: string) => void }) {
-  const [tab, setTab] = useState('Bids');
   const [bids, setBids] = useState<BidItem[]>([]);
-  const [activeListing, setActiveListing] = useState<ListingItem | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchBids = async () => {
       try {
-        if (!api.getToken()) {
-          await api.login('+919876543210', 'password123');
-        }
-        
-        // 1. Get farmer's active listings
-        const myLots = await api.getMyListings();
-        const active = myLots.listings.find(l => l.status === 'BIDDING' || l.status === 'ACTIVE');
-        
-        if (active) {
-          setActiveListing(active);
-          // 2. Fetch bids for the active lot
-          const bidData = await api.getListingBids(active.id);
-          setBids(bidData.bids);
-        }
+        const data = await api.getMyBids();
+        if (data && data.bids) setBids(data.bids);
       } catch (e) {
-        console.error("Failed fetching bids:", e);
-      } finally {
-        setLoading(false);
+        console.warn('Could not sync bids:', e);
       }
     };
     fetchBids();
   }, []);
 
-  const handleAcceptBid = async (bidId: string) => {
-    try {
-      await api.acceptBid(bidId);
-      notify('Bid accepted! Escrow is now locked, and an Order has been generated.');
-      setBids(current => current.map(b => b.id === bidId ? { ...b, status: 'ACCEPTED' } : { ...b, status: 'REJECTED' }));
-    } catch (e) {
-      console.error(e);
-      notify('Failed to accept bid.');
-    }
-  };
+  const dummyBids = [
+    { buyer: 'BigBasket Wholesale', crop: 'Tomato (Arka Rakshak)', qty: '200 kg', offer: '₹40 / kg', min: '₹42 / kg', status: 'Pending review', time: '12m ago' },
+    { buyer: 'Reliance Fresh', crop: 'Onion (N-53)', qty: '400 kg', offer: '₹30 / kg', min: '₹31 / kg', status: 'Counter offer sent', time: '1h ago' },
+    { buyer: 'Shakti Foods', crop: 'Wheat (Lokwan)', qty: '1,200 kg', offer: '₹2,450 / q', min: '₹2,400 / q', status: 'Matched & locked', time: '3h ago' },
+  ];
 
-  return (
-    <>
-      <PageHeading eyebrow="Your marketplace" title="Orders & bids" description="Stay on top of every sale, offer, and pickup." />
-      <div className="order-tabs">
-        <button className={tab === 'Bids' ? 'active' : ''} onClick={() => setTab('Bids')}>Bulk bids <b>{bids.length}</b></button>
-        <button className={tab === 'Retail' ? 'active' : ''} onClick={() => setTab('Retail')}>Retail orders <b>0</b></button>
-      </div>
-      
-      {tab === 'Bids' ? (
-        <div className="bids-layout">
-          <div className="bid-main card">
-            <div className="card-title-row">
-              <div>
-                <h2>Live bids {activeListing ? `on ${activeListing.crop_name}` : ''}</h2>
-                {activeListing ? (
-                  <p>{activeListing.quantity} {activeListing.unit} · Grade {activeListing.quality?.grade || 'A'}</p>
-                ) : (
-                  <p>No active listings with bids.</p>
-                )}
-              </div>
-              {activeListing && <span className="live-pill"><i /> Live auction</span>}
-            </div>
-            
-            {loading ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Loading live bids...</div>
-            ) : bids.length === 0 ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Waiting for buyers to place bids...</div>
-            ) : (
-              bids.map((bid, i) => (
-                <div className={`bid-row ${i === 0 ? 'top-bid' : ''} ${bid.status === 'ACCEPTED' ? 'accepted-bid' : ''}`} key={bid.id}>
-                  <span className="rank">{i + 1}</span>
-                  <div className="buyer">
-                    <span className="buyer-avatar">{bid.buyer_name ? bid.buyer_name[0] : 'B'}</span>
-                    <div>
-                      <strong>{bid.buyer_name || 'Verified Buyer'}</strong>
-                      <small><MapPin size={12} /> {bid.distance_km || 18} km away</small>
-                    </div>
-                  </div>
-                  <div className="bid-price">
-                    <small>Offer price</small>
-                    <strong>₹{bid.price_per_unit} / {activeListing?.unit || 'kg'}</strong>
-                  </div>
-                  <div className="net-price">
-                    <small>Est. Total</small>
-                    <strong>₹{bid.estimated_total}</strong>
-                  </div>
-                  {bid.status === 'ACCEPTED' ? (
-                    <span style={{ color: '#16a34a', fontWeight: 'bold', marginLeft: 'auto' }}>ACCEPTED</span>
-                  ) : bid.status === 'REJECTED' ? (
-                    <span style={{ color: '#94a3b8', marginLeft: 'auto' }}>Rejected</span>
-                  ) : i === 0 ? (
-                    <button className="accept-button" onClick={() => handleAcceptBid(bid.id)}>Accept bid</button>
-                  ) : (
-                    <button className="more-button" onClick={() => notify(`Counter offer sent to ${bid.buyer_name}`)}>Counter</button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-          
-          <div className="contract-card card">
-            <span className="contract-icon"><FileText size={21} /></span>
-            <h2>Bulk supply contract</h2>
-            <p>Accepting a bid creates a secure 3-month supply agreement.</p>
-            <div className="contract-line"><ShieldCheck size={16} /> T+0 escrow protection</div>
-            <div className="contract-line"><Truck size={16} /> Pooled pickup included</div>
-            <button className="outline-button" onClick={() => notify('Contract terms opened')}>View contract terms <ChevronRight size={15} /></button>
-          </div>
-        </div>
-      ) : (
-        <div className="retail-empty card">
-          <span className="service-icon"><ShoppingBag /></span>
-          <h2>No retail orders currently</h2>
-          <p>You haven't received any new retail direct orders.</p>
-        </div>
-      )}
-    </>
-  );
+  return <>
+    <PageHeading eyebrow="Direct negotiation" title="Incoming bids & orders" description="Accept, counter or reject buyer offers in real time." action={<button className="primary-button" onClick={() => notify('Auto-accept rules updated')}><Zap size={17} /> Auto-accept rules</button>} />
+    <div className="orders-summary"><div className="summary-pill active"><span>Pending bids</span><b>4</b></div><div className="summary-pill"><span>Accepted & in escrow</span><b>₹28,400</b></div><div className="summary-pill"><span>Ready for pickup</span><b>2 lots</b></div></div>
+    <div className="card bids-card"><div className="card-title-row"><div><h2>Real-time buyer bids</h2><p>Tap accept to lock funds in automated escrow</p></div><span className="live-pill"><i /> Live bidding open</span></div>
+      <div className="bid-list">{dummyBids.map((bid, i) => <div className="bid-row" key={i}><div className="bid-buyer"><div className="buyer-icon"><ShoppingBag size={18} /></div><div><strong>{bid.buyer}</strong><p>{bid.crop} · {bid.qty}</p></div></div><div className="bid-pricing"><small>Offer vs Minimum</small><div><b>{bid.offer}</b><span>{bid.min}</span></div></div><div className="bid-status"><span className={`status-pill ${bid.status.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}>{bid.status}</span><small>{bid.time}</small></div><div className="bid-actions"><button className="primary-button small" onClick={() => notify(`Accepted ${bid.buyer} offer! Payment locked in escrow.`)}>Accept</button><button className="outline-button small" onClick={() => notify(`Counter-offer sent to ${bid.buyer}.`)}>Counter</button></div></div>)}</div>
+    </div>
+  </>;
 }
 
 function Logistics({ notify }: { notify: (message: string) => void }) {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const pickups = [
+    { lot: 'Wheat (1,200 kg)', partner: 'Raj Surface Logistics', vehicle: 'MH-12-Q-4521', driver: 'Sanjay Shinde', time: 'Tomorrow, 08:30 AM', status: 'Assigned', phone: '+91 98234 11204' },
+    { lot: 'Tomato (246 kg)', partner: 'Kisan Cold Express', vehicle: 'MH-14-BT-9810', driver: 'Vinod Pawar', time: 'Tomorrow, 11:00 AM', status: 'Cold chain verified', phone: '+91 94220 88319' },
+  ];
 
-  useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        const res = await api.getOrders();
-        // Get active orders (accepted, in transit)
-        const activeOrders = res.orders.filter(o => o.status !== 'COMPLETED' && o.status !== 'CANCELLED');
-        setOrders(activeOrders);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchOrders();
-  }, []);
-
-  const topOrder = orders.length > 0 ? orders[0] : null;
-
-  return (
-    <>
-      <PageHeading eyebrow="Move with confidence" title="Logistics & pickup" description="Track pooled pickups and release payments securely." />
-      {loading ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Loading logistics tracking...</div>
-      ) : !topOrder ? (
-        <div className="retail-empty card">
-          <span className="service-icon"><Truck /></span>
-          <h2>No upcoming pickups</h2>
-          <p>You don't have any orders scheduled for pickup.</p>
-        </div>
-      ) : (
-        <div className="logistics-grid">
-          <div className="tracking-card card">
-            <div className="card-title-row">
-              <div>
-                <h2>{topOrder.status === 'IN_TRANSIT' ? 'In Transit' : 'Upcoming pickup'}</h2>
-                <p>Order {topOrder.id.slice(-6).toUpperCase()} · Route MH-12</p>
-              </div>
-              <span className="eta">ETA Tomorrow</span>
-            </div>
-            <div className="map-visual">
-              <div className="map-grid" />
-              <span className="map-road road-one" />
-              <span className="map-road road-two" />
-              <span className="map-pin pin-farm"><Sprout size={14} /></span>
-              <span className="map-pin pin-truck"><Truck size={14} /></span>
-              <span className="map-pin pin-mandi"><MapPin size={14} /></span>
-              <div className="map-label farm-label">Your farm</div>
-              <div className="map-label mandi-label">Destination</div>
-            </div>
-            <div className="timeline">
-              <div className="timeline-item complete">
-                <span><ShieldCheck size={15} /></span>
-                <div><strong>Order Confirmed</strong><small>Escrow payment locked</small></div>
-                <time>{new Date(topOrder.created_at).toLocaleDateString()}</time>
-              </div>
-              <div className={topOrder.status === 'IN_TRANSIT' ? "timeline-item complete" : "timeline-item current"}>
-                <span><Truck size={15} /></span>
-                <div><strong>Vehicle en route</strong><small>Driver is coming for pickup</small></div>
-              </div>
-              <div className={topOrder.status === 'COMPLETED' ? "timeline-item complete" : "timeline-item"}>
-                <span><IndianRupee size={15} /></span>
-                <div><strong>Payment released</strong><small>After dual OTP handover</small></div>
-              </div>
-            </div>
-          </div>
-          <div className="handover-card card">
-            <span className="handover-icon"><ShieldCheck size={24} /></span>
-            <h2>Secure handover</h2>
-            <p>Share this OTP with the driver to confirm pickup and release your escrow payment.</p>
-            <div className="otp-box">
-              <span>Farmer OTP</span>
-              <strong>{topOrder.pickup_otp || '••••'}</strong>
-              <button onClick={() => notify('OTP Copied to clipboard')}>Copy OTP</button>
-            </div>
-            <div className="otp-box muted">
-              <span>Delivery partner</span>
-              <strong>Waiting</strong>
-              <small>Partner enters their OTP at destination</small>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
+  return <>
+    <PageHeading eyebrow="Farm gate dispatch" title="Logistics & transport tracking" description="Coordinated pickups, vehicle tracking and cold storage." action={<button className="primary-button" onClick={() => notify('Booking shared truck route...')}><Truck size={17} /> Request pickup</button>} />
+    <div className="logistics-grid"><div className="pickup-card card"><div className="card-title-row"><div><h2>Scheduled pickups</h2><p>Drivers assigned to your lots</p></div><span className="active-pill"><Truck size={14} /> 2 scheduled</span></div>
+      <div className="pickup-list">{pickups.map((p, i) => <div className="pickup-row" key={i}><div className="pickup-icon"><Truck size={20} /></div><div className="pickup-info"><strong>{p.lot}</strong><p>{p.partner} · {p.vehicle}</p><small>Driver: {p.driver} ({p.phone})</small></div><div className="pickup-time"><span>Scheduled</span><strong>{p.time}</strong><span className="logistics-status">{p.status}</span></div><div className="pickup-actions"><button className="outline-button small" onClick={() => notify(`Calling ${p.driver}...`)}>Call driver</button><button className="ghost-button small" onClick={() => notify('Pickup receipt generated.')}>Receipt</button></div></div>)}</div></div>
+      <div className="route-card card"><div className="card-title-row"><div><h2>Route pooling</h2><p>Save 35% on freight with shared trucks</p></div><Zap size={18} className="amber-text" /></div><div className="route-insight"><p><strong>Nashik → Vashi APMC Route</strong></p><p>Truck arriving tomorrow at 8:30 AM has <strong>600 kg spare capacity</strong>. Pool your onion listing to save freight charges.</p><button className="primary-button" style={{ marginTop: '1rem', width: '100%', justifyContent: 'center' }} onClick={() => notify('Produce added to shared truck pool.')}>Pool produce into route</button></div></div>
+    </div>
+  </>;
 }
 
-function Wallet() { return <><PageHeading eyebrow="Your money, protected" title="Earnings wallet" description="See your available balance, escrow funds, and payouts." action={<button className="outline-button"><FileText size={17} /> Download statement</button>} /><div className="wallet-balance"><div><span>Total earnings</span><strong>₹1,84,620</strong><small><ArrowUpRight size={14} /> 22.8% from last month</small></div><div className="balance-detail"><div><span>Available to withdraw</span><strong>₹36,820</strong></div><div><span>In escrow</span><strong>₹12,400</strong></div></div></div><div className="wallet-content card"><div className="card-title-row"><div><h2>Transaction history</h2><p>Your latest payouts and protected payments</p></div><button className="text-button">This month <ChevronRight size={15} /></button></div>{[['Payment received','Wheat · Shakti Foods','Today, 10:24 AM','+₹8,400'],['Escrow locked','Wheat bulk order · #KS-2481','Today, 09:12 AM','₹12,400'],['Payment received','Tomato · Retail order','08 Sep 2026','+₹4,260'],['Payout withdrawn','Transferred to HDFC Bank','05 Sep 2026','-₹18,000']].map(([title, text, time, amount]) => <div className="transaction" key={title + time}><span className="transaction-icon"><IndianRupee size={17} /></span><div><strong>{title}</strong><p>{text}</p></div><small>{time}</small><b className={amount.startsWith('+') ? 'positive-text' : amount.startsWith('₹') ? 'amber-text' : ''}>{amount}</b></div>)}</div></>; }
+function Wallet() {
+  return <>
+    <PageHeading eyebrow="Instant settlement" title="Earnings & escrow payments" description="Payments released directly to your bank upon delivery verification." action={<button className="primary-button"><IndianRupee size={17} /> Withdraw to bank</button>} />
+    <div className="wallet-cards"><div className="wallet-balance-card"><span>Available for withdrawal</span><strong>₹48,620</strong><p>Bank: HDFC Bank ···· 4921</p><div className="wallet-quick-actions"><button className="white-button">Instant UPI transfer</button><button className="trans-button">View bank details</button></div></div>
+      <div className="escrow-card"><div><ShieldCheck size={26} /><div><p>Protected in escrow</p><strong>₹12,400</strong><small>Locked by buyers · Releases on delivery OTP</small></div></div></div></div>
+  </>;
+}
 
-function ListingModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (item: Listing) => void }) {
+function ListingModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (listing?: Listing) => void }) {
+  const [crop, setCrop] = useState('');
+  const [variety, setVariety] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [price, setPrice] = useState('');
   const [route, setRoute] = useState<'Retail' | 'Bulk'>('Retail');
-  const [crop, setCrop] = useState('Tomato');
-  const [variety, setVariety] = useState('Arka Rakshak');
-  const [quantity, setQuantity] = useState('500');
-  const [expectedDate, setExpectedDate] = useState('2026-09-15');
-  const [price, setPrice] = useState('32');
-  const [grade, setGrade] = useState<'A' | 'B' | 'C'>('A');
-  const [aiDetails, setAiDetails] = useState<{ ripeness: number; disease: number; uniformity: number } | null>({
-    ripeness: 92,
-    disease: 6,
-    uniformity: 88,
-  });
-  const [isGrading, setIsGrading] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [grade, setGrade] = useState<'A' | 'B'>('A');
 
-  const simulateVoiceInput = () => {
-    setCrop('Tomato');
-    setVariety('Hybrid S-11');
-    setQuantity('500');
-    setPrice('34');
-    setExpectedDate('2026-09-18');
-    runAiGrading('Tomato');
-  };
-
-  const runAiGrading = (cropName = crop) => {
-    setIsGrading(true);
-    setTimeout(() => {
-      const rip = Math.floor(Math.random() * 15) + 85;
-      const dis = Math.floor(Math.random() * 8) + 2;
-      const uni = Math.floor(Math.random() * 12) + 86;
-      setAiDetails({ ripeness: rip, disease: dis, uniformity: uni });
-      setGrade(rip > 88 && dis < 10 ? 'A' : 'B');
-      setIsGrading(false);
-    }, 900);
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-      runAiGrading();
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!crop || !quantity) {
+      onSubmit();
+      return;
     }
-  };
-
-  const handlePublish = async () => {
-    setIsPublishing(true);
-    try {
-      // 1. Ensure authenticated
-      if (!api.getToken()) {
-        try {
-          await api.login('+919876543210', 'password123');
-        } catch {
-          await api.register({
-            name: 'Ramesh Kumar',
-            phone: '+919876543210',
-            role: 'farmer',
-            language: 'hi',
-          });
-        }
-      }
-
-      // 2. Call backend API to save in MongoDB
-      const numQty = parseFloat(quantity) || 100;
-      const numPrice = parseFloat(price) || 30;
-      await api.createListing({
-        crop_name: crop,
-        variety,
-        quantity: numQty,
-        unit: 'kg',
-        expected_date: expectedDate,
-        minimum_price: numPrice,
-        description: `Farm-fresh ${crop} (${variety}), Grade ${grade}.`,
-      }).catch((err) => console.warn('Saved offline/local fallback:', err));
-
-      onSubmit({
-        crop,
-        variety,
-        quantity: `${quantity} kg`,
-        route,
-        grade: grade === 'C' ? 'B' : grade,
-        status: 'Live',
-        price: `₹${price} / kg`,
-      });
-    } catch (err) {
-      console.error(err);
-      onSubmit({
-        crop,
-        variety,
-        quantity: `${quantity} kg`,
-        route,
-        grade: grade === 'C' ? 'B' : grade,
-        status: 'Live',
-        price: `₹${price} / kg`,
-      });
-    } finally {
-      setIsPublishing(false);
-    }
+    onSubmit({
+      crop,
+      variety: variety || 'Standard',
+      quantity: quantity.includes('kg') ? quantity : `${quantity} kg`,
+      price: price ? `₹${price} / kg` : '₹40 / kg',
+      route,
+      grade,
+      status: 'Live',
+    });
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
-      <div className="listing-modal" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="modal-head">
-          <div>
-            <span className="eyebrow">Phase 3 — Farmer Marketplace Listing</span>
-            <h2>List your produce</h2>
-          </div>
-          <button className="close-button" onClick={onClose}><X size={19} /></button>
+    <div className="modal-backdrop">
+      <div className="modal card">
+        <div className="modal-header">
+          <div><p className="eyebrow">Direct produce listing</p><h2>List your harvest</h2><p>Enter details below to publish your lot to retail and bulk buyers.</p></div>
+          <button className="icon-button" onClick={onClose}><X size={18} /></button>
         </div>
-
-        <button className="voice-button" onClick={simulateVoiceInput} type="button">
-          <Mic size={20} />
-          <span>
-            <strong>🎤 Voice to Listing (Hindi/English)</strong>
-            <small>Click to simulate: "500 kilo tomato hai, 15 September ko ready hoga"</small>
-          </span>
-          <ChevronRight size={17} />
-        </button>
-
-        <div className="form-grid">
-          <label>
-            Crop name
-            <div className="input-wrap">
-              <input value={crop} onChange={(e) => setCrop(e.target.value)} placeholder="e.g. Tomato, Wheat, Onion" />
-            </div>
-          </label>
-          <label>
-            Variety / breed
-            <div className="input-wrap">
-              <input value={variety} onChange={(e) => setVariety(e.target.value)} placeholder="e.g. Arka Rakshak" />
-            </div>
-          </label>
-          <label>
-            Quantity (kg)
-            <div className="input-wrap">
-              <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-              <span>kg</span>
-            </div>
-          </label>
-          <label>
-            Expected harvest date
-            <div className="input-wrap">
-              <input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
-            </div>
-          </label>
-        </div>
-
-        {/* Crop Photo & AI Quality Grading Section */}
-        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <div>
-              <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>📸 Crop Image & AI Quality Pre-Grade</strong>
-              <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>Upload crop photo to run computer vision quality analysis</p>
-            </div>
-            <label style={{ padding: '6px 12px', background: '#16a34a', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
-              Upload Photo
-              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageChange} />
-            </label>
+        <form onSubmit={handleSubmit} className="listing-form">
+          <div className="form-row">
+            <div className="form-field"><label>Crop name</label><input placeholder="e.g. Tomato, Wheat, Potato" value={crop} onChange={e => setCrop(e.target.value)} required /></div>
+            <div className="form-field"><label>Variety</label><input placeholder="e.g. Arka Rakshak, Lokwan" value={variety} onChange={e => setVariety(e.target.value)} /></div>
           </div>
-
-          {imagePreview && (
-            <div style={{ marginBottom: '0.75rem', textAlign: 'center' }}>
-              <img src={imagePreview} alt="Crop preview" style={{ maxHeight: '120px', borderRadius: '8px', objectFit: 'cover' }} />
-            </div>
-          )}
-
-          <div className="quality-preview" style={{ marginTop: 0 }}>
-            <div className="quality-loading">
-              <span className="crop-photo"><Wheat size={22} /></span>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <strong>AI Grade: {isGrading ? 'Scanning...' : `Grade ${grade}`}</strong>
-                  <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: '4px' }}>
-                    {isGrading ? 'Analyzing...' : '92% Confidence'}
-                  </span>
-                </div>
-                {aiDetails && !isGrading && (
-                  <div style={{ display: 'flex', gap: '12px', fontSize: '0.75rem', color: '#475569', marginTop: '4px' }}>
-                    <span>Ripeness: <b>{aiDetails.ripeness}%</b></span>
-                    <span>Disease: <b>{aiDetails.disease}%</b></span>
-                    <span>Uniformity: <b>{aiDetails.uniformity}%</b></span>
-                  </div>
-                )}
-              </div>
-              <span className="grade" style={{ background: grade === 'A' ? '#16a34a' : '#f59e0b', color: '#fff' }}>{grade}</span>
-            </div>
+          <div className="form-row">
+            <div className="form-field"><label>Total quantity (kg or quintals)</label><input placeholder="e.g. 500 kg or 10 quintals" value={quantity} onChange={e => setQuantity(e.target.value)} required /></div>
+            <div className="form-field"><label>Expected price per unit (₹)</label><input placeholder="e.g. 42" value={price} onChange={e => setPrice(e.target.value)} required /></div>
           </div>
-        </div>
-
-        {/* Pricing & Route */}
-        <div className="route-section">
-          <div className="route-heading">
-            <div>
-              <h3>Pricing & Selling Route</h3>
-              <p>Set your minimum expected price per kg</p>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontWeight: 600 }}>₹</span>
-              <input
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                style={{ width: '80px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold' }}
-              />
-              <small>/ kg</small>
-            </div>
+          <div className="form-row">
+            <div className="form-field"><label>Target market</label><select value={route} onChange={e => setRoute(e.target.value as 'Retail' | 'Bulk')}><option value="Retail">Retail buyers (small batches)</option><option value="Bulk">Bulk procurement (truckloads)</option></select></div>
+            <div className="form-field"><label>Assayed quality grade</label><select value={grade} onChange={e => setGrade(e.target.value as 'A' | 'B')}><option value="A">Grade A (Premium)</option><option value="B">Grade B (Standard)</option></select></div>
           </div>
-          <div className="route-options">
-            <button className={route === 'Retail' ? 'selected' : ''} onClick={() => setRoute('Retail')} type="button">
-              <span className="route-radio" />
-              <div>
-                <strong>Retail direct marketplace</strong>
-                <small>Fixed price · Fast local payout</small>
-              </div>
-              <b>₹{price} / kg</b>
-            </button>
-            <button className={route === 'Bulk' ? 'selected' : ''} onClick={() => setRoute('Bulk')} type="button">
-              <span className="route-radio" />
-              <div>
-                <strong>Bulk B2B bidding</strong>
-                <small>Live buyer auction · Pooled pickup</small>
-              </div>
-              <b>Min ₹{price} / kg</b>
-            </button>
+          <div className="modal-actions">
+            <button type="button" className="outline-button" onClick={onClose}>Cancel</button>
+            <button type="submit" className="primary-button"><Plus size={16} /> Publish lot</button>
           </div>
-        </div>
-
-        <div className="modal-actions">
-          <button className="cancel-button" onClick={onClose} type="button">Cancel</button>
-          <button className="primary-button" onClick={handlePublish} disabled={isPublishing} type="button">
-            <Zap size={17} /> {isPublishing ? 'Saving to Database...' : 'Publish Listing'}
-          </button>
-        </div>
+        </form>
       </div>
     </div>
   );
