@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+motor
+pymongo
+websockets
+redis
+python-multipart
+pyjwt
+passlib[bcrypt]
